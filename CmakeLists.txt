@@ -1,0 +1,24 @@
+cmake_minimum_required(VERSION 3.16)
+project(scanner)
+
+set(CMAKE_CXX_STANDARD 17)
+
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(TAGLIB REQUIRED taglib)
+pkg_check_modules(SQLITE3 REQUIRED sqlite3)
+
+add_executable(scanner main.cpp)
+
+target_link_libraries(scanner ${TAGLIB_LIBRARIES} ${SQLITE3_LIBRARIES})
+target_include_directories(scanner PRIVATE ${TAGLIB_INCLUDE_DIRS} ${SQLITE3_INCLUDE_DIRS})
+
+add_executable(lookup
+    src/lookup.cpp
+    src/db.cpp
+)
+
+target_include_directories(lookup PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+    ${SQLITE3_INCLUDE_DIRS}
+)
+target_link_libraries(lookup PRIVATE ${SQLITE3_LIBRARIES})
