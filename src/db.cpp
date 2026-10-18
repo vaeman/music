@@ -47,7 +47,7 @@ public:
     }
 };
 
-const char *SELECT_SONG =
+const std::string SELECT_SONG =
     "SELECT s.id, s.title, ar.name, al.title, s.track_no, s.duration_ms, s.file_path, s.ext, s.year "
     "FROM songs s "
     "JOIN artists ar ON ar.id = s.artist_id "
@@ -108,7 +108,7 @@ void SongDB::initSchema() {
     exec(DB, R"(
         CREATE TABLE IF NOT EXISTS albums (
             id        INTEGER PRIMARY KEY,
-            title     TEXT NOT NULL,
+            name     TEXT NOT NULL,
             artist_id INTEGER NOT NULL REFERENCES artists(id),
             UNIQUE (title, artist_id)
         );)");
@@ -127,31 +127,55 @@ void SongDB::initSchema() {
         );)");
 }
 
-int SongDB::add(const Song &s) {
+int SongDB::addSongs(const std::vector<Song> &songs) {
+    int added = 0;
     exec(DB, "BEGIN;");
     try {
-        int artist_id = findOrCreateArtist(s.artist);
-        int album_id = findOrCreateAlbum(s.album, artist_id);
+        for (const auto &song : songs) {
+            int artist_id = checkArtist(song.artist);
+            if (artist_id == -1)
+                artist_id = addArtist(song.artist);
 
-        Stmt st(DB, "INSERT INTO songs(title, duration_ms, track_no, file_path, ext, year, artist_id, album_id) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?);");
-        st.bind(1, s.title);
-        st.bind(2, s.duration_ms);
-        st.bind(3, s.track_number);
-        st.bind(4, s.file_path);
-        st.bind(5, s.ext);
-        st.bind(6, s.year);
-        st.bind(7, artist_id);
-        st.bind(8, album_id);
-        st.step();
+            int album_id = checkAlbum(song.album, artist_id);
+            if (album_id == -1)
+                album_id = addAlbum(song.album, artist_id);
 
-        int id = static_cast<int>(sqlite3_last_insert_rowid(DB));
+            Stmt st(DB, "INSERT INTO songs(title, duration_ms, track_no, file_path, ext, year, artist_id, album_id) "
+                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
+                        "ON CONFLICT(file_path) DO NOTHING;");
+            st.bind(1, song.title);
+            st.bind(2, song.duration_ms);
+            st.bind(3, song.track_number);
+            st.bind(4, song.file_path);
+            st.bind(5, song.ext);
+            st.bind(6, song.year);
+            st.bind(7, artist_id);
+            st.bind(8, album_id);
+            st.step();
+
+            if (sqlite3_changes(DB) > 0)
+                ++added; // 0 = that path already existed
+        }
         exec(DB, "COMMIT;");
-        return id;
     } catch (...) {
         sqlite3_exec(DB, "ROLLBACK;", nullptr, nullptr, nullptr);
         throw;
     }
+    return added;
+}
+int SongDB::addArtist(const std::string &name) {
+    Stmt st(DB, "INSERT INTO artists(name) VALUES (?);");
+    st.bind(1, name);
+    st.step();
+    return static_cast<int>(sqlite3_last_insert_rowid(DB));
+}
+
+int SongDB::addAlbum(const std::string &title, const int &artist_id) {
+    Stmt st(DB, "INSERT INTO albums(title, artist_id) VALUES (?, ?);");
+    st.bind(1, title);
+    st.bind(2, artist_id);
+    st.step();
+    return static_cast<int>(sqlite3_last_insert_rowid(DB));
 }
 
 bool SongDB::remove(int song_id) {
@@ -183,4 +207,23 @@ std::vector<Song> SongDB::listAll() {
     while (st.step())
         out.push_back(rowToSong(st));
     return out;
+}
+
+int SongDB::checkArtist(const std::string &artist_name) {
+    Stmt st(DB, "SELECT id FROM artists WHERE name = ?;");
+    st.bind(1, artist_name);
+    if (!st.step())
+        return -1;
+    else
+        return st.colInt(0);
+}
+
+int SongDB::checkAlbum(const std::string &album_name, const int &artist_id) {
+    Stmt st(DB, "SELECT id FROM albums WHERE name = ? and artist_id = ?;");
+    st.bind(1, album_name);
+    st.bind(2, artist_id);
+    if (!st.step())
+        return -1;
+    else
+        return st.colInt(0);
 }

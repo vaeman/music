@@ -44,6 +44,18 @@ public:
     // Deletes a song by id. Returns true if a row was deleted.
     bool remove(int song_id);
 
+    // Check Artist
+    int checkArtist(const std::string &artist_name);
+
+    // Check Album
+    int checkAlbum(const std::string &album_name, const int &album_id);
+
+    // adds artist to artists table
+    int addArtist(const std::string &name);
+
+    // adds album to albums table
+    int addAlbum(const std::string &name, const int &artist_id);
+
     // Deletes a song by exact file_path. Returns true if a row was deleted.
     bool removeByPath(const std::string &file_path);
 
